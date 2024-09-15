@@ -2,8 +2,9 @@ import usePrisma from './hooks/data/usePrisma'
 import { Client, GatewayIntentBits } from 'discord.js'
 import useUserRepo from './hooks/data/useUserRepo'
 import useTransactionRepo from './hooks/data/useTransactionRepo'
-import _, { Dictionary } from 'lodash'
 import useEnv from './hooks/config/useEnv'
+import useWikigame from './hooks/data/work/wikigame/useWikigame'
+import _ from 'lodash'
 
 async function main() {
   const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.MessageContent, GatewayIntentBits.GuildMessages] });
@@ -29,17 +30,33 @@ async function main() {
       return
     }
 
+    const seed = userId + guildId + new Date().toDateString()
+
     const user = await userRepo.createUserIfNotExists(guildId, userId)
 
     if (command.toLowerCase() === 'balance') {
       const balance = await userRepo.getBalance(user)
-      await message.reply(`You have $${balance.toFixed(2)}`)
+      await message.reply(`You have $${balance}`)
     }
 
-    if (['canihavemoney', 'work'].includes(command.toLowerCase())) {
-      await transactionRepo.receiveFromBank("Work/Demand of money", user, null, 5000)
-      const balance = await userRepo.getBalance(user)
-      await message.reply(`I have given you $5000 for no reason. You now have $${balance.toFixed(2)}`)
+    if (command.toLowerCase().startsWith('work wikigame')) {
+      const wikigame = useWikigame(seed)
+      if (command === 'work wikigame') {
+        const [start, finish] = await wikigame.getGame()
+        await message.reply(`Form a link between ${start} and ${finish}.`)
+      } else {
+        const links = command.trim().split(' ').slice(2).filter(Boolean)
+        try {
+          await wikigame.verifyGame(links)
+        } catch (e) {
+          await message.reply(`Failed: ${e}`)
+          return
+        }
+        const payout = 100
+        await transactionRepo.receiveFromBank("wikigame payout", user, null, payout)
+        const balance = await userRepo.getBalance(user)
+        await message.reply(`Success! You've been paid $${payout}. New balance: $${balance}`)
+      }
     }
 
     if (command.toLowerCase() === 'gamble') {
@@ -52,15 +69,15 @@ async function main() {
       if (Math.random() > 0.999) {
         await transactionRepo.receiveFromBank("Gamble - big win", user, null, 250000)
         const balance = await userRepo.getBalance(user)
-        await message.reply(`You win the big one! take $250,000. You now have $${balance.toFixed(2)}`)
+        await message.reply(`You win the big one! take $250,000. You now have $${balance}`)
       } else if (Math.random() > 0.5) {
         await transactionRepo.receiveFromBank("Gamble - win", user, null, 250)
         const balance = await userRepo.getBalance(user)
-        await message.reply(`You win! take $250. You now have $${balance.toFixed(2)}`)
+        await message.reply(`You win! take $250. You now have $${balance}`)
       } else {
         await transactionRepo.sendToBank("Gamble - loss", user, null, 250)
         const balance = await userRepo.getBalance(user)
-        await message.reply(`You lose. I'm taking $250 from you. You now have $${balance.toFixed(2)}`)
+        await message.reply(`You lose. I'm taking $250 from you. You now have $${balance}`)
       }
     }
 
